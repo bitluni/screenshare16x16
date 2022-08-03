@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<script>
+		var ctx = null;
+		var canvas = null;
+		var video = null;
+		var ip = null;
+		
+		async function convertCanvas24Bit(ctx, xres, yres)
+		{
+			let imgData = ctx.getImageData(0, 0, xres, yres);		
+			let pixels = imgData.data;
+			var buff = new Uint8Array(xres * yres * 3);
+			for(var y = 0; y < yres; y++)
+				for(var x = 0; x < xres; x++)
+				{
+					buff[(y * xres + x) * 3 + 0] = pixels[(x + y * xres) * 4 + 0] >> 3;
+					buff[(y * xres + x) * 3 + 1] = pixels[(x + y * xres) * 4 + 1] >> 4;
+					buff[(y * xres + x) * 3 + 2] = pixels[(x + y * xres) * 4 + 2] >> 4;
+				}
+			let req = new XMLHttpRequest();
+			req.open("POST", "http://"+ ip + "/frame", true);
+			await req.send(buff);
+		}
+
+		async function convertCanvas16Bit(ctx, xres, yres)
+		{
+			let imgData = ctx.getImageData(0, 0, xres, yres);		
+			let pixels = imgData.data;
+			var buff = new Uint8Array(xres * yres * 2);
+			for(var y = 0; y < yres; y++)
+				for(var x = 0; x < xres; x++)
+				{
+					let r = pixels[(x + y * xres) * 4 + 0] >> 3;
+					let g = pixels[(x + y * xres) * 4 + 1] >> 4;
+					let b = pixels[(x + y * xres) * 4 + 2] >> 4;
+					let rgb = r | (g << 5) | (b << 11);
+					buff[(y * xres + x) * 2 + 0] = rgb & 255;
+					buff[(y * xres + x) * 2 + 1] = rgb >> 8;
+				}
+			let req = new XMLHttpRequest();
+			req.open("POST", "http://"+ ip + "/frame", true);
+			await req.send(buff);
+		}
+
+		async function videoCB()
+		{
+			let w = (video.videoWidth / video.videoHeight) * canvas.height;
+			ctx.drawImage(video, (canvas.width - w) * 0.5, 0, w, canvas.height);
+			//await convertCanvas24Bit(ctx, canvas.width, canvas.height);
+			await convertCanvas16Bit(ctx, canvas.width, canvas.height);
+			video.requestVideoFrameCallback(videoCB);
+		}
+		
+		async function startCapture() 
+		{
+			ip = document.querySelector("#ip").value;
+			localStorage.setItem('ip', ip);
+			canvas = document.querySelector('canvas');
+			ctx = canvas.getContext('2d');			
+			video = document.querySelector('video');
+			
+			video.srcObject = await navigator.mediaDevices.getDisplayMedia({video: {cursor: "always"}, audio: false});
+			setTimeout(() => {
+				video.play();
+				video.requestVideoFrameCallback(videoCB);
+			}, 250);
+		}
+
+	</script>
+</head>
+
+<body style="font-family: arial" onload="document.getElementById('ip').value = localStorage.getItem('ip')">
+	<h1><a href="https://youtube.com/bitlunislab">bitluni's</a> screen share</h1>
+	<button onclick="startCapture();">share</button><input id="ip" type="text" placeholder="192.168.bla.blup"><br>
+	<video autoplay hidden></video><br>
+	<canvas width="16px" height="16px" style="zoom: 8" ></canvas><br>
+</body>
+</html>
